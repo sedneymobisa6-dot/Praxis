@@ -1,0 +1,206 @@
+import Link from 'next/link';
+import { createClient } from '@/lib/supabase/server';
+import { requireAdmin } from '@/lib/admin/checkAdmin';
+import BrandLogo from '@/components/BrandLogo';
+
+const ODPC_BLUE = '#0A3D62';
+
+function formatKes(amount: number) {
+  return 'KES ' + amount.toLocaleString('en-KE');
+}
+
+export default async function AdminMetrics() {
+  const { user } = await requireAdmin();
+  const supabase = createClient();
+
+  const { data: firms } = await supabase
+    .from('firms')
+    .select('id, subscription_status, monthly_fee_kes, created_at');
+
+  const { data: clients } = await supabase
+    .from('clients')
+    .select('id, firm_id, created_at');
+
+  const { data: dsars } = await supabase
+    .from('client_dsar_requests')
+    .select('id');
+
+  const { data: breaches } = await supabase
+    .from('client_breaches')
+    .select('id');
+
+  const allFirms = firms ?? [];
+
+  const totalFirms = allFirms.length;
+  const activeFirms = allFirms.filter((f) => f.subscription_status === 'active').length;
+  const trialFirms = allFirms.filter((f) => f.subscription_status === 'trial').length;
+  const suspendedFirms = allFirms.filter((f) => f.subscription_status === 'suspended').length;
+  const cancelledFirms = allFirms.filter((f) => f.subscription_status === 'cancelled').length;
+
+  const totalClients = clients?.length ?? 0;
+
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const clientsLast30 = (clients ?? []).filter(
+    (c) => new Date(c.created_at) >= thirtyDaysAgo
+  ).length;
+
+  const mrr = allFirms
+    .filter((f) => f.subscription_status === 'active')
+    .reduce((sum, f) => sum + (f.monthly_fee_kes ?? 0), 0);
+
+  const contractedRevenue = allFirms
+    .filter(
+      (f) =>
+        f.subscription_status !== 'suspended' &&
+        f.subscription_status !== 'cancelled'
+    )
+    .reduce((sum, f) => sum + (f.monthly_fee_kes ?? 0), 0);
+
+  const averageFeePerFirm =
+    activeFirms > 0 ? Math.round(mrr / activeFirms) : 0;
+
+  const averageClientsPerFirm =
+    totalFirms > 0 ? Math.round(totalClients / totalFirms) : 0;
+
+  const totalDsars = dsars?.length ?? 0;
+  const totalBreaches = breaches?.length ?? 0;
+
+  const metrics = [
+    {
+      label: 'Total firms',
+      value: totalFirms,
+      note: 'All firms on the platform',
+    },
+    {
+      label: 'Active firms',
+      value: activeFirms,
+      note: 'Paying customers',
+    },
+    {
+      label: 'Trial firms',
+      value: trialFirms,
+      note: 'Not yet converted to paid',
+    },
+    {
+      label: 'Suspended firms',
+      value: suspendedFirms,
+      note: 'Payment or policy issues',
+    },
+    {
+      label: 'Cancelled firms',
+      value: cancelledFirms,
+      note: 'No longer on the platform',
+    },
+    {
+      label: 'Total clients',
+      value: totalClients,
+      note: 'Across all firms',
+    },
+    {
+      label: 'Clients added (30 days)',
+      value: clientsLast30,
+      note: 'New clients onboarded this month',
+    },
+    {
+      label: 'Monthly recurring revenue',
+      value: formatKes(mrr),
+      note: 'Actual revenue from active firms',
+    },
+    {
+      label: 'Contracted revenue',
+      value: formatKes(contractedRevenue),
+      note: 'Expected revenue across all live firms',
+    },
+    {
+      label: 'Average fee per firm',
+      value: formatKes(averageFeePerFirm),
+      note: 'Average monthly subscription',
+    },
+    {
+      label: 'Average clients per firm',
+      value: averageClientsPerFirm,
+      note: 'Compliance density per firm',
+    },
+    {
+      label: 'DSARs logged',
+      value: totalDsars,
+      note: 'Data subject requests handled',
+    },
+    {
+      label: 'Breaches logged',
+      value: totalBreaches,
+      note: 'Personal data breaches reported',
+    },
+  ];
+
+  return (
+    <div className="min-h-screen bg-zinc-50">
+      <nav className="border-b border-zinc-200 bg-white">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+          <div className="flex items-center gap-4">
+            <Link href="/admin">
+              <BrandLogo layout="horizontal" variant="dark" />
+            </Link>
+            <div className="h-6 w-px bg-zinc-300 hidden sm:block" />
+            <span className="hidden text-base font-bold text-black sm:block">
+              Admin
+            </span>
+          </div>
+          <div className="flex items-center gap-4">
+            <Link
+              href="/admin/metrics"
+              className="text-sm font-medium"
+              style={{ color: ODPC_BLUE }}
+            >
+              Metrics
+            </Link>
+            <Link
+              href="/admin/audit"
+              className="text-sm text-zinc-500 hover:text-zinc-900"
+            >
+              Audit log
+            </Link>
+            <span className="hidden text-sm text-zinc-500 md:inline">
+              {user.email}
+            </span>
+          </div>
+        </div>
+        <div className="h-[3px] w-full" style={{ backgroundColor: ODPC_BLUE }} />
+      </nav>
+
+      <main className="mx-auto max-w-6xl px-6 py-10">
+        <div className="mb-8">
+          <p
+            className="text-xs font-semibold uppercase tracking-widest"
+            style={{ color: ODPC_BLUE }}
+          >
+            Platform
+          </p>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-900">
+            Metrics
+          </h1>
+          <p className="mt-1 text-sm text-zinc-500">
+            The state of Praxis at a glance.
+          </p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {metrics.map((m) => (
+            <div
+              key={m.label}
+              className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm"
+            >
+              <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                {m.label}
+              </p>
+              <p className="mt-2 text-2xl font-semibold text-zinc-900">
+                {m.value}
+              </p>
+              <p className="mt-1 text-xs text-zinc-500">{m.note}</p>
+            </div>
+          ))}
+        </div>
+      </main>
+    </div>
+  );
+}
