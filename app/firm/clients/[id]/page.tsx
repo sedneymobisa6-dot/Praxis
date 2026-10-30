@@ -1,5 +1,7 @@
 ‎import { redirect } from 'next/navigation';
 ‎import Link from 'next/link';
+
+
 ‎import { createClient } from '@/lib/supabase/server';
 ‎import { SECTOR_LABELS } from '@/lib/sectors';
 ‎import BrandLogo from '@/components/BrandLogo';
